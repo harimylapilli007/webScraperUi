@@ -435,10 +435,14 @@ export default function WebScraperPage() {
       socket.current = io(socketUrl, {
         transports: ['websocket', 'polling'],
         reconnection: true,
-        reconnectionAttempts: 5,
-        reconnectionDelay: 1000,
-        timeout: 20000,
-        forceNew: true
+        reconnectionAttempts: 5, // Increased from 3 to 5
+        reconnectionDelay: 2000,
+        timeout: 20000, // Increased from 10000 to 20000
+        forceNew: true,
+        autoConnect: true,
+        path: '/socket.io/', // Added explicit path for Azure
+        secure: process.env.NODE_ENV === 'production', // Enable secure connection in production
+        rejectUnauthorized: false // Allow self-signed certificates in development
       }) as unknown as ExtendedSocket;
       
       console.log("Socket.IO connecting to:", socketUrl);
@@ -447,14 +451,23 @@ export default function WebScraperPage() {
       const connectionTimeout = setTimeout(() => {
         if (socket.current && !socket.current.connected) {
           console.error("Socket.IO connection timeout");
-          socket.current.disconnect();
-          socket.current = null;
           setIsConnected(false);
           
-          // Attempt to reconnect after timeout
-          setTimeout(connectSocketIO, 3000, userIdToSend);
+          // Clean up the socket
+          try {
+            socket.current.disconnect();
+          } catch (e) {
+            console.error("Error disconnecting on timeout:", e);
+          }
+          socket.current = null;
+          
+          // Attempt to reconnect after a longer delay
+          setTimeout(() => {
+            console.log("Attempting to reconnect after timeout...");
+            connectSocketIO(userIdToSend);
+          }, 5000); // Increased from 3000 to 5000
         }
-      }, 5000);
+      }, 8000); // Reduced from 5000 to 8000 to give more time for initial connection
       
       if (!socket.current) return;
 
@@ -485,15 +498,19 @@ export default function WebScraperPage() {
         console.log("Socket.IO connection closed:", reason);
         setIsConnected(false);
         
-        // Attempt to reconnect after a delay
-        setTimeout(() => {
-          console.log("Attempting to reconnect Socket.IO...");
-          connectSocketIO(userIdToSend || (userId || undefined));
-        }, 3000);
+        // Only attempt to reconnect if it wasn't a client-side disconnect
+        if (reason !== "io client disconnect") {
+          // Attempt to reconnect after a delay
+          setTimeout(() => {
+            console.log("Attempting to reconnect Socket.IO...");
+            connectSocketIO(userIdToSend || (userId || undefined));
+          }, 5000); // Increased from 3000 to 5000
+        }
       });
       
       socket.current.on('connect_error', (error: Error) => {
         console.error("Socket.IO error:", error);
+        setIsConnected(false);
         // The disconnect handler will handle reconnection
       });
       
@@ -522,7 +539,11 @@ export default function WebScraperPage() {
       });
     } catch (error) {
       console.error("Error creating Socket.IO connection:", error);
-      setTimeout(connectSocketIO, 3000);
+      setIsConnected(false);
+      setTimeout(() => {
+        console.log("Attempting to reconnect after error...");
+        connectSocketIO(userIdToSend);
+      }, 5000); // Increased from 3000 to 5000
     }
   };
 
@@ -550,7 +571,7 @@ export default function WebScraperPage() {
     setActiveTab("logs");
     
     try {
-      const response = await axios.post<ScraperResponse>('http://localhost:5000/run-scraper', { user_id: userId });
+      const response = await axios.post<ScraperResponse>(`${process.env.NEXT_PUBLIC_API_URL}/run-scraper`, { user_id: userId });
       const jobId = response.data.job_id;
       
       if (!jobId) {
@@ -611,7 +632,7 @@ export default function WebScraperPage() {
     
     try {
       const response = await axios.post<ScraperResponse>(
-        'http://localhost:5000/stop-scraper',
+        `${process.env.NEXT_PUBLIC_API_URL}/stop-scraper`,
         { job_id: jobId },
         { headers: { 'Content-Type': 'application/json' } }
       )

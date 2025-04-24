@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
-import { Plus, Trash, Save, Upload, Wand2, Download } from "lucide-react"
+import { Plus, X, Save, ArrowUp, ArrowDown, Settings2 } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { apiFetch, getUserId } from "@/utils/api"
 
@@ -56,7 +56,7 @@ const SelectorHelper = () => {
     <Dialog>
       <DialogTrigger asChild>
         <Button variant="outline" size="icon" className="ml-2">
-          <Wand2 className="h-4 w-4" />
+          <Settings2 className="h-4 w-4" />
         </Button>
       </DialogTrigger>
       <DialogContent>
@@ -623,8 +623,8 @@ export default function ConfigEditor() {
               <div key={index} className="grid gap-4 p-4 border rounded-lg">
                 <div className="flex justify-between">
                   <h4 className="font-medium">Field #{index + 1}</h4>
-                  <Button variant="ghost" size="icon" onClick={() => removeField(index)}>
-                    <Trash className="h-4 w-4" />
+                  <Button variant="outline" size="sm" onClick={() => removeField(index)}>
+                    <X className="h-4 w-4" />
                   </Button>
                 </div>
 
@@ -708,8 +708,8 @@ export default function ConfigEditor() {
                 <div key={index} className="grid gap-4 p-4 border rounded-lg">
                   <div className="flex justify-between">
                     <h4 className="font-medium">Subpage Field #{index + 1}</h4>
-                    <Button variant="ghost" size="icon" onClick={() => removeSubpageField(index)}>
-                      <Trash className="h-4 w-4" />
+                    <Button variant="outline" size="sm" onClick={() => removeSubpageField(index)}>
+                      <X className="h-4 w-4" />
                     </Button>
                   </div>
 
@@ -773,13 +773,13 @@ export default function ConfigEditor() {
 
       <div className="flex justify-end space-x-4">
         <Button variant="outline" onClick={handleImport}>
-          <Upload className="mr-2 h-4 w-4" /> Import Config
+          <ArrowUp className="mr-2 h-4 w-4" /> Import Config
         </Button>
         <Button onClick={handleSave}>
           <Save className="mr-2 h-4 w-4" /> Save Configuration
         </Button>
         <Button variant="outline" onClick={handleExport}>
-          <Download className="mr-2 h-4 w-4" /> Export Config
+          <ArrowDown className="mr-2 h-4 w-4" /> Export Config
         </Button>
       </div>
     </div>

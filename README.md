@@ -7,7 +7,7 @@ This is the frontend for the web scraping application.
 Create a `.env` file in the root of the frontend directory with the following variables:
 
 ```
-NEXT_PUBLIC_API_URL=http://localhost:5000
+NEXT_PUBLIC_API_URL=http://localhost:5001
 ```
 
 ## Installation
