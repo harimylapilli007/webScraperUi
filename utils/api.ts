@@ -5,16 +5,17 @@ export const getUserId = () => {
     let stored = localStorage.getItem('userId');
     
     // If no stored ID or it's invalid, generate a new one
-    if (!stored || stored === 'anonymous' || stored === 'null') {
+    if (!stored || stored === 'anonymous' || stored === 'null' || stored.trim() === '') {
         stored = `user_${Math.random().toString(36).substring(2, 15)}_${Date.now()}`;
         localStorage.setItem('userId', stored);
+        console.log("Generated new user ID:", stored);
     }
     
     return stored;
 };
 
 // Base API URL - use environment variable with fallback
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL;
 
 // Helper function to add user ID to headers
 export const getHeaders = (additionalHeaders = {}) => {
@@ -56,7 +57,7 @@ export const apiFetch = async (endpoint: string, options: RequestInit = {}) => {
         
         // Add timeout to the fetch request
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
 
         const response = await fetch(url, {
             ...options,
@@ -79,7 +80,7 @@ export const apiFetch = async (endpoint: string, options: RequestInit = {}) => {
     } catch (error: any) {
         if (error.name === 'AbortError') {
             console.error('Request timed out');
-            throw new Error('Request timed out after 10 seconds');
+            throw new Error('Request timed out after 30 seconds');
         }
         if (error.message === 'Failed to fetch') {
             console.error('Network error - please check if the backend server is running');

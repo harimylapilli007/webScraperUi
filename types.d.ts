@@ -80,5 +80,6 @@ declare module '@/components/jobs-list' {
 
 declare module '@/utils/api' {
   export function getUserId(): string | null;
+  export function getHeaders(additionalHeaders?: Record<string, string>): Record<string, string>;
   export function apiFetch(url: string, options?: RequestInit): Promise<Response>;
 } 

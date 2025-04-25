@@ -10,10 +10,11 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import ConfigEditor from "@/components/config-editor"
 import JobsList from "@/components/jobs-list"
 import axios from "axios"
-import {getUserId } from "@/utils/api"
+import { getUserId, getHeaders } from "@/utils/api"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Manager, Socket } from "socket.io-client"
 import { connect as io } from "socket.io-client"
+
 
 interface ExtendedSocket {
   connected: boolean;
@@ -64,6 +65,91 @@ interface ForceRefresh {
   [key: string]: number;
 }
 
+// Enhanced Socket.IO Debugging Component
+const SocketDebug = ({ isConnected, userId, socket }: { isConnected: boolean, userId: string | null, socket: any }) => {
+  const [expanded, setExpanded] = useState<boolean>(false);
+  const [lastActivity, setLastActivity] = useState<string>("None");
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+  
+  // Update status when connection state changes
+  useEffect(() => {
+    if (isConnected) {
+      setLastActivity(`Connected at ${new Date().toLocaleTimeString()}`);
+      setConnectionError(null);
+    } else {
+      setConnectionError("Disconnected - Check if backend is running on port 5000");
+    }
+  }, [isConnected]);
+  
+  return (
+    <div className={`fixed bottom-0 right-0 bg-black bg-opacity-75 text-white p-2 text-xs z-50 rounded-tl-md ${expanded ? 'w-80' : 'w-auto'}`}>
+      <div className="flex justify-between items-center mb-1">
+        <span>Socket: <span className={isConnected ? 'text-green-500' : 'text-red-500'}>
+          {isConnected ? 'Connected' : 'Disconnected'}
+        </span></span>
+        <button 
+          onClick={() => setExpanded(!expanded)} 
+          className="px-2 py-0.5 rounded hover:bg-gray-700"
+        >
+          {expanded ? 'Hide' : 'More'}
+        </button>
+      </div>
+      
+      <div className="flex">
+        <span>User ID: {userId?.slice(0, 8)}...</span>
+        <button 
+          onClick={() => {
+            // Manually trigger reconnection
+            if (socket?.current) {
+              socket.current.disconnect();
+              setTimeout(() => window.location.reload(), 500);
+            } else {
+              window.location.reload();
+            }
+          }}
+          className="ml-2 px-1.5 py-0.5 rounded bg-blue-700 hover:bg-blue-600 text-xs"
+        >
+          Reconnect
+        </button>
+      </div>
+      
+      {expanded && (
+        <div className="mt-2 border-t border-gray-700 pt-1">
+          <div>Last Activity: {lastActivity}</div>
+          {connectionError && (
+            <div className="mt-1 text-red-400">Error: {connectionError}</div>
+          )}
+          <div className="mt-1 text-yellow-400">
+            Backend URL: {process.env.NEXT_PUBLIC_API_URL}
+          </div>
+          <div className="mt-1">
+            <button 
+              onClick={() => {
+                // Use proper headers with X-User-Id
+                const headers = getHeaders();
+                fetch(`${process.env.NEXT_PUBLIC_API_URL}/ping`, {
+                  headers
+                })
+                  .then(res => res.json())
+                  .then(data => {
+                    setLastActivity(`Server pinged at ${new Date().toLocaleTimeString()}`);
+                    setConnectionError(null);
+                  })
+                  .catch(err => {
+                    setConnectionError(`Ping failed: ${err.message}`);
+                  });
+              }}
+              className="px-2 py-0.5 rounded bg-green-700 hover:bg-green-600 text-xs"
+            >
+              Ping Server
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function WebScraperPage() {
   const [activeTab, setActiveTab] = useState<string>("config")
   const [jobLogs, setJobLogs] = useState<JobLogs>({})
@@ -78,6 +164,7 @@ export default function WebScraperPage() {
   const endOfLogsRef = useRef<HTMLDivElement>(null)
   const [activeJobId, setActiveJobId] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
+  const [showDebug, setShowDebug] = useState<boolean>(true)
 
   // Add a seen message cache to prevent duplicate logs
   const [seenMessages] = useState<Set<string>>(new Set<string>());
@@ -103,12 +190,16 @@ export default function WebScraperPage() {
     console.log("Initial userId for Socket.IO:", initialUserId);
     
     // Connect with user ID if available (handle null case)
-    if (initialUserId) {
-      setUserId(initialUserId);
-      connectSocketIO(initialUserId);
-    } else {
-      connectSocketIO();
-    }
+    const initConnection = async () => {
+      if (initialUserId) {
+        setUserId(initialUserId);
+        await connectSocketIO(initialUserId);
+      } else {
+        await connectSocketIO();
+      }
+    };
+    
+    initConnection();
     
     return () => {
       if (socket.current) {
@@ -237,6 +328,13 @@ export default function WebScraperPage() {
       }
     }
 
+    // Normalize Unicode characters
+    try {
+      formattedMessage = decodeURIComponent(escape(formattedMessage));
+    } catch (error) {
+      console.warn("Error normalizing Unicode characters:", error);
+    }
+
     // Check if this message indicates the job has ended
     const isCompletionMessage = messageContent?.includes("Scraper completed successfully") || 
                               messageContent?.includes("Successfully quit driver") ||
@@ -313,12 +411,20 @@ export default function WebScraperPage() {
 
     if (status === "running") {
       setRunningJobs((prev: RunningJobs) => ({ ...prev, [jobId]: true }));
-      setLoadingJobs((prev: LoadingJobs) => ({ ...prev, [jobId]: true }));
+      setLoadingJobs((prev: LoadingJobs) => ({ ...prev, [jobId]: false }));
       setStoppingJobs((prev: StoppingJobs) => ({ ...prev, [jobId]: false }));
       
       // Add a log entry for job start
       handleLogMessage(jobId, "Scraper started running...");
-    } else if (status === "stopped" || status === "error") {
+    } else if (status === "stopping") {
+      setRunningJobs((prev: RunningJobs) => ({ ...prev, [jobId]: false }));
+      setLoadingJobs((prev: LoadingJobs) => ({ ...prev, [jobId]: false }));
+      setStoppingJobs((prev: StoppingJobs) => ({ ...prev, [jobId]: true }));
+      
+      // Add a log entry for job stopping
+      handleLogMessage(jobId, "Stopping scraper...");
+    } else if (status === "stopped" || status === "error" || status === "completed") {
+      // Reset all states for the job
       setRunningJobs((prev: RunningJobs) => ({ ...prev, [jobId]: false }));
       setLoadingJobs((prev: LoadingJobs) => ({ ...prev, [jobId]: false }));
       setStoppingJobs((prev: StoppingJobs) => ({ ...prev, [jobId]: false }));
@@ -326,7 +432,9 @@ export default function WebScraperPage() {
       // Add a log entry for job end
       const message = status === "error" 
         ? "Scraper stopped with error"
-        : "Scraper completed successfully";
+        : status === "completed"
+        ? "Scraper completed successfully"
+        : "Scraper stopped by user";
       handleLogMessage(jobId, message);
     }
   };
@@ -388,8 +496,11 @@ export default function WebScraperPage() {
       // Add timestamp if not present
       const timestamp = new Date().toISOString();
       
+      // Generate a truly unique ID using timestamp, random value, and array length
+      const uniqueId = Date.now() * 1000000 + Math.floor(Math.random() * 1000000) + jobLogs.length;
+      
       // Add the new log
-      updatedLogs[jobId] = [...jobLogs, { id: Date.now(), text: normalizedMessage, timestamp }];
+      updatedLogs[jobId] = [...jobLogs, { id: uniqueId, text: normalizedMessage, timestamp }];
       
       // Keep only the last 1000 logs to prevent memory issues
       if (updatedLogs[jobId].length > 1000) {
@@ -400,152 +511,167 @@ export default function WebScraperPage() {
     });
   };
 
-  const connectSocketIO = (userIdToSend?: string) => {
-    // Check for existing connection
-    if (socket.current) {
-      if (socket.current.connected) {
-        console.log("Socket.IO already connected")
-        
-        // If we have a specific user ID to send, do it now
-        if (userIdToSend && socket.current.connected) {
-          socket.current.emit('init', { 
-            type: "init", 
-            user_id: userIdToSend,
-            action: "subscribe"
-          });
-          console.log("Sent user ID to existing Socket.IO:", userIdToSend);
-        }
-        return;
-      }
-      
-      // If we get here, the connection is not connected, so clean it up
-      try {
-        socket.current.disconnect();
-      } catch (e) {
-        console.error("Error disconnecting existing Socket.IO:", e);
-      }
-      socket.current = null;
-    }
-
-    console.log("Attempting to connect to Socket.IO...");
-    
+  // Add server ping test
+  const pingServer = async (url: string): Promise<boolean> => {
     try {
-      // Connect to Socket.IO server
-      const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:5000';
-      socket.current = io(socketUrl, {
-        transports: ['websocket', 'polling'],
-        reconnection: true,
-        reconnectionAttempts: 5, // Increased from 3 to 5
-        reconnectionDelay: 2000,
-        timeout: 20000, // Increased from 10000 to 20000
-        forceNew: true,
-        autoConnect: true,
-        path: '/socket.io/', // Added explicit path for Azure
-        secure: process.env.NODE_ENV === 'production', // Enable secure connection in production
-        rejectUnauthorized: false // Allow self-signed certificates in development
-      }) as unknown as ExtendedSocket;
+      // Get the proper headers including X-User-Id
+      const headers = getHeaders({ 'Content-Type': 'application/json' });
       
-      console.log("Socket.IO connecting to:", socketUrl);
+      // Get the user ID to also append as query parameter
+      const userId = getUserId();
+      // Create URL with userId parameter
+      const pingUrl = `${url}/ping${userId ? `?userId=${encodeURIComponent(userId)}` : ''}`;
       
-      // Set connection timeout
-      const connectionTimeout = setTimeout(() => {
-        if (socket.current && !socket.current.connected) {
-          console.error("Socket.IO connection timeout");
-          setIsConnected(false);
-          
-          // Clean up the socket
-          try {
-            socket.current.disconnect();
-          } catch (e) {
-            console.error("Error disconnecting on timeout:", e);
-          }
-          socket.current = null;
-          
-          // Attempt to reconnect after a longer delay
-          setTimeout(() => {
-            console.log("Attempting to reconnect after timeout...");
-            connectSocketIO(userIdToSend);
-          }, 5000); // Increased from 3000 to 5000
-        }
-      }, 8000); // Reduced from 5000 to 8000 to give more time for initial connection
-      
-      if (!socket.current) return;
-
-      socket.current.on('connect', () => {
-        console.log("Socket.IO connection established successfully");
-        clearTimeout(connectionTimeout);
-        setIsConnected(true);
-        
-        // Send user ID to Socket.IO server
-        const idToSend = userIdToSend || userId;
-        if (idToSend && socket.current && socket.current.connected) {
-          console.log("Sending user ID to Socket.IO server:", idToSend);
-          socket.current.emit('init', { 
-            type: "init", 
-            user_id: idToSend,
-            action: "subscribe"
-          });
-          
-          // Add debug message for monitoring connection
-          console.log("Socket.IO connection established and user ID sent");
-        } else {
-          console.warn("No user ID available on Socket.IO connection or socket not connected");
-        }
-      });
-
-      // Handle reconnection on error or close
-      socket.current.on('disconnect', (reason: string) => {
-        console.log("Socket.IO connection closed:", reason);
-        setIsConnected(false);
-        
-        // Only attempt to reconnect if it wasn't a client-side disconnect
-        if (reason !== "io client disconnect") {
-          // Attempt to reconnect after a delay
-          setTimeout(() => {
-            console.log("Attempting to reconnect Socket.IO...");
-            connectSocketIO(userIdToSend || (userId || undefined));
-          }, 5000); // Increased from 3000 to 5000
-        }
+      const response = await fetch(pingUrl, {
+        method: 'GET',
+        headers,
+        // Short timeout to avoid long waits
+        signal: AbortSignal.timeout(3000)
       });
       
-      socket.current.on('connect_error', (error: Error) => {
-        console.error("Socket.IO error:", error);
-        setIsConnected(false);
-        // The disconnect handler will handle reconnection
-      });
+      if (response.ok) {
+        console.log("✅ Backend server is available");
+        return true;
+      }
       
-      // Handle different message types
-      socket.current.on('log', (data: WebSocketMessage) => {
-        console.log("Received Socket.IO log message:", data);
-        handleSocketMessage(data);
-      });
-      
-      socket.current.on('state', (data: WebSocketMessage) => {
-        console.log("Received Socket.IO state message:", data);
-        handleSocketMessage(data);
-      });
-      
-      socket.current.on('connection', (data: WebSocketMessage) => {
-        console.log("Received Socket.IO connection message:", data);
-        handleSocketMessage(data);
-      });
-      
-      // Handle any other events
-      socket.current.onAny((eventName: string, ...args: any[]) => {
-        console.log(`Received Socket.IO event ${eventName}:`, args);
-        if (args.length > 0) {
-          handleSocketMessage(args[0]);
-        }
-      });
+      console.error("❌ Backend server ping failed with status:", response.status);
+      return false;
     } catch (error) {
-      console.error("Error creating Socket.IO connection:", error);
-      setIsConnected(false);
-      setTimeout(() => {
-        console.log("Attempting to reconnect after error...");
-        connectSocketIO(userIdToSend);
-      }, 5000); // Increased from 3000 to 5000
+      console.error("❌ Backend server ping failed:", error);
+      return false;
     }
   };
+
+  // Modified connectSocketIO with ping test
+  const connectSocketIO = async (userIdToSend?: string) => {
+    // Check for existing connection and clean up if needed
+    if (socket.current) {
+        try {
+            socket.current.disconnect();
+        } catch (e) {
+            console.error("Error disconnecting existing Socket.IO:", e);
+        }
+        socket.current = null;
+    }
+
+    console.log("🔌 Attempting to connect to Socket.IO...");
+    
+    try {
+        // Use explicit localhost URL to ensure connection
+        const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:5000';
+        
+        // Test if server is reachable before connecting
+        const isServerAvailable = await pingServer(socketUrl);
+        if (!isServerAvailable) {
+          console.error("❌ Cannot connect - backend server is not responding");
+          setIsConnected(false);
+          
+          // Try again after delay
+          setTimeout(() => connectSocketIO(userIdToSend), 5000);
+          return;
+        }
+            
+        console.log("Socket URL:", socketUrl);
+        
+        // Ensure we always have a user ID
+        let effectiveUserId = userIdToSend || userId;
+        if (!effectiveUserId && typeof window !== 'undefined') {
+            // Generate a temporary user ID if none exists
+            effectiveUserId = `user_${Math.random().toString(36).substring(2, 15)}_${Date.now()}`;
+            console.log("Generated temporary user ID:", effectiveUserId);
+            localStorage.setItem('userId', effectiveUserId);
+            setUserId(effectiveUserId);
+        }
+        
+        if (!effectiveUserId) {
+            console.error("❌ No user ID available for Socket.IO connection");
+            return;
+        }
+
+        // Configure Socket.IO client with simple, reliable settings
+        socket.current = io(socketUrl, {
+            transports: ['polling', 'websocket'],  // Start with polling then upgrade to websocket
+            reconnection: true,
+            reconnectionAttempts: Infinity,
+            reconnectionDelay: 1000,
+            autoConnect: true,
+            forceNew: true,
+            query: {
+                userId: effectiveUserId
+            },
+            auth: {
+                'X-User-Id': effectiveUserId
+            }
+        }) as unknown as ExtendedSocket;
+
+        // Connection event handlers
+        socket.current.on('connect', () => {
+            console.log("✅ Socket.IO connected successfully");
+            setIsConnected(true);
+            
+            // Send init message
+            if (socket.current && socket.current.connected) {
+                console.log("📤 Sending init message with user ID:", effectiveUserId);
+                socket.current.emit('init', { 
+                    type: "init", 
+                    user_id: effectiveUserId,
+                    action: "subscribe",
+                    timestamp: new Date().toISOString()
+                });
+            }
+        });
+
+        socket.current.on('disconnect', () => {
+            console.log("❌ Socket.IO disconnected");
+            setIsConnected(false);
+            
+            // Attempt to reconnect after a short delay
+            setTimeout(() => {
+                if (!socket.current?.connected) {
+                    console.log("🔄 Attempting to reconnect after disconnect...");
+                    connectSocketIO(effectiveUserId);
+                }
+            }, 2000);
+        });
+        
+        socket.current.on('connect_error', (error) => {
+            console.error("❌ Socket.IO connection error:", error);
+            setIsConnected(false);
+            
+            // Attempt to reconnect after error
+            setTimeout(() => {
+                if (!socket.current?.connected) {
+                    console.log("🔄 Attempting to reconnect after error...");
+                    connectSocketIO(effectiveUserId);
+                }
+            }, 2000);
+        });
+        
+        // Message handlers
+        socket.current.on('log', (data: WebSocketMessage) => {
+            console.log("📥 Received log message:", data);
+            handleSocketMessage(data);
+        });
+        
+        socket.current.on('state', (data: WebSocketMessage) => {
+            console.log("📥 Received state message:", data);
+            handleSocketMessage(data);
+        });
+        
+        socket.current.on('connection', (data: WebSocketMessage) => {
+            console.log("📥 Received connection message:", data);
+            handleSocketMessage(data);
+            
+            // Update connection status based on message
+            if (data.status === 'connected') {
+                setIsConnected(true);
+            }
+        });
+    } catch (error) {
+        console.error("❌ Error creating Socket.IO connection:", error);
+        setIsConnected(false);
+    }
+};
 
   const disconnectSocketIO = () => {
     if (socket.current) {
@@ -560,10 +686,16 @@ export default function WebScraperPage() {
         ? "Error: Socket.IO not connected. Please wait for connection..."
         : "Error: No user ID available";
       
-      setJobLogs((prevLogs: JobLogs) => ({
-        ...prevLogs,
-        temp: prevLogs.temp ? [...prevLogs.temp, { id: Date.now(), text: errorMessage }] : [{ id: Date.now(), text: errorMessage }]
-      }));
+      // Generate a unique ID for error messages with extra randomness
+      const uniqueId = Date.now() * 1000000 + Math.floor(Math.random() * 1000000);
+      
+      setJobLogs((prevLogs: JobLogs) => {
+        const temp = prevLogs.temp || [];
+        return {
+          ...prevLogs,
+          temp: [...temp, { id: uniqueId, text: errorMessage }]
+        };
+      });
       return;
     }
     
@@ -571,7 +703,14 @@ export default function WebScraperPage() {
     setActiveTab("logs");
     
     try {
-      const response = await axios.post<ScraperResponse>(`${process.env.NEXT_PUBLIC_API_URL}/run-scraper`, { user_id: userId });
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+      // Use getHeaders to include X-User-Id header
+      const headers = getHeaders();
+      const response = await axios.post<ScraperResponse>(
+        `${apiUrl}/run-scraper`, 
+        { user_id: userId },
+        { headers }
+      );
       const jobId = response.data.job_id;
       
       if (!jobId) {
@@ -611,11 +750,16 @@ export default function WebScraperPage() {
         ? "Error: Please ensure the scraper server is running on port 5000"
         : `Error: ${error.response?.data?.message || error.message}`;
 
-      const errorId = Date.now();
-      setJobLogs((prevLogs: JobLogs) => ({
-        ...prevLogs,
-        temp: prevLogs.temp ? [...prevLogs.temp, { id: errorId, text: errorMessage }] : [{ id: errorId, text: errorMessage }]
-      }));
+      // Generate a unique ID for error messages with extra randomness
+      const errorId = Date.now() * 1000000 + Math.floor(Math.random() * 1000000);
+      
+      setJobLogs((prevLogs: JobLogs) => {
+        const temp = prevLogs.temp || [];
+        return {
+          ...prevLogs,
+          temp: [...temp, { id: errorId, text: errorMessage }]
+        };
+      });
       
       setLoadingJobs({});
       setRunningJobs({});
@@ -631,18 +775,28 @@ export default function WebScraperPage() {
     setStoppingJobs(prev => ({ ...prev, [jobId]: true }));
     
     try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+      // Use getHeaders to include X-User-Id header
+      const headers = getHeaders();
       const response = await axios.post<ScraperResponse>(
-        `${process.env.NEXT_PUBLIC_API_URL}/stop-scraper`,
+        `${apiUrl}/stop-scraper`,
         { job_id: jobId },
-        { headers: { 'Content-Type': 'application/json' } }
-      )
+        { headers }
+      );
       
       if (response.data.message) {
         handleLogMessage(jobId, response.data.message);
       }
+      
+      // Reset stopping state after successful stop
+      setStoppingJobs(prev => ({ ...prev, [jobId]: false }));
+      setRunningJobs(prev => ({ ...prev, [jobId]: false }));
     } catch (error: any) {
       console.error("Error stopping scraper:", error);
-      const errorId = Date.now();
+      
+      // Generate a unique ID for error messages with extra randomness
+      const errorId = Date.now() * 1000000 + Math.floor(Math.random() * 1000000);
+      
       const errorMessage = `Error: ${error.response?.data?.message || error.message}`;
       
       setJobLogs((prevLogs: JobLogs) => {
@@ -653,6 +807,7 @@ export default function WebScraperPage() {
         };
       });
       
+      // Reset stopping state on error
       setStoppingJobs(prev => ({ ...prev, [jobId]: false }));
     }
   }
@@ -680,156 +835,197 @@ export default function WebScraperPage() {
   }, [activeJobId, jobLogs, forceRefresh]);
 
   return (
-    <div className="container mx-auto py-10">
-      <h1 className="text-3xl font-bold mb-6">Web Scraper Dashboard</h1>
+    <div className="container py-8 mx-auto">
+      <h1 className="text-3xl font-bold mb-6">Web Scraper</h1>
+      <div className="grid gap-8">
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList>
+            <TabsTrigger value="config">Configuration</TabsTrigger>
+            <TabsTrigger value="logs">Logs</TabsTrigger>
+            <TabsTrigger value="results">Results</TabsTrigger>
+          </TabsList>
 
-      <Tabs defaultValue="config" value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="config">Configuration</TabsTrigger>
-          <TabsTrigger value="results">Results</TabsTrigger>
-          <TabsTrigger value="logs">Logs</TabsTrigger>
-        </TabsList>
+          <TabsContent value="config">
+            <Card className="mb-8">
+              <CardHeader>
+                <div className="flex justify-between items-center">
+                  <CardTitle>Configure Scraping</CardTitle>
+                  <div className="flex items-center space-x-2">
+                    {Object.values(runningJobs).some(Boolean) ? (
+                      <Button 
+                        onClick={() => {
+                          const runningJobId = Object.entries(runningJobs)
+                            .find(([_, running]) => running)?.[0];
+                          if (runningJobId) {
+                            stopScraper(runningJobId);
+                          }
+                        }} 
+                        variant="destructive"
+                        disabled={Object.values(stoppingJobs).some(Boolean)} 
+                        className="flex items-center space-x-2"
+                      >
+                        {Object.values(stoppingJobs).some(Boolean) ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            <span>Stopping...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Square className="mr-2 h-4 w-4" />
+                            <span>Stop Scraper</span>
+                          </>
+                        )}
+                      </Button>
+                    ) : (
+                      <Button 
+                        onClick={runScraper} 
+                        disabled={Object.values(loadingJobs).some(Boolean)} 
+                        className="flex items-center space-x-2"
+                      >
+                        {Object.values(loadingJobs).some(Boolean) ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            <span>Starting...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Play className="mr-2 h-4 w-4" />
+                            <span>Run Scraper</span>
+                          </>
+                        )}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                <CardDescription>Configure the web scraper settings</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ConfigEditor />
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-        <TabsContent value="config">
-          <ConfigEditor />
-        </TabsContent>
+          <TabsContent value="results">
+            <JobsList isActive={activeTab === "results"} />
+          </TabsContent>
 
-        <TabsContent value="results">
-          <JobsList isActive={activeTab === "results"} />
-        </TabsContent>
-
-        <TabsContent value="logs">
-          <Card>
-            <CardHeader>
-              <div className="flex justify-between items-center">
-                <CardTitle>Scraping Logs</CardTitle>
-                {Object.keys(jobLogs).length > 1 && (
-                  <Select
-                    value={activeJobId || ""}
-                    onValueChange={(value: string) => setActiveJobId(value)}
-                  >
-                    <SelectTrigger className="w-[200px]">
-                      <SelectValue placeholder="Select job" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.keys(jobLogs).map((jobId: string) => (
-                        <SelectItem key={jobId} value={jobId}>
-                          {jobId === "system" ? "System Messages" : `Job: ${jobId.slice(0, 8)}...`}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-              <CardDescription>
-                View the execution logs from the scraping process
-                <span className={`ml-2 inline-block h-2 w-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></span>
-                <span className="ml-1 text-xs">{isConnected ? 'Connected' : 'Disconnected'}</span>
-                {Object.entries(runningJobs).map(([jobId, isRunning]: [string, boolean]) => 
-                  isRunning && (
-                    <span key={jobId} className="ml-2 text-xs">
-                      {stoppingJobs[jobId] ? `Stopping scraper (Job ID: ${jobId})...` : `Scraper running (Job ID: ${jobId})...`}
-                    </span>
-                  )
-                )}
-                {activeJobId === "system" && (
-                  <span className="ml-2 text-xs font-bold">
-                    Viewing system messages
-                  </span>
-                )}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ScrollArea className="h-[400px] w-full rounded-md border p-4 bg-black text-white font-mono">
-                <div style={{ width: '100%' }}>
-                  {currentLogs.length === 0 ? (
-                    <div className="text-gray-500 italic">No logs yet.</div>
-                  ) : (
-                    <div className="space-y-1">
-                      {currentLogs.map((log: LogEntry, logIndex: number) => {
-                        // Determine if this is an error message
-                        const isError = log.text.toLowerCase().includes('error') || 
-                                        log.text.toLowerCase().includes('exception') || 
-                                        log.text.toLowerCase().includes('failed');
-                        
-                        return (
-                          <pre 
-                            key={`log-${log.id}-${logIndex}`} 
-                            className={`${isError ? 'text-red-400' : 'text-green-400'} px-2 py-1 rounded ${isError ? 'bg-red-950/30' : ''} w-full overflow-x-auto`}
-                            style={{
-                              whiteSpace: 'pre-wrap',
-                              wordBreak: 'break-word',
-                              fontFamily: 'monospace',
-                              fontSize: '0.875rem',
-                              lineHeight: '1.5',
-                            }}
-                          >
-                            {log.text || '\u00A0'} {/* Non-breaking space to preserve empty lines */}
-                          </pre>
-                        );
-                      })}
-                      <div ref={endOfLogsRef} />
-                    </div>
+          <TabsContent value="logs">
+            <Card>
+              <CardHeader>
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center space-x-4">
+                    <CardTitle>Scraping Logs</CardTitle>
+                    {Object.entries(runningJobs).map(([jobId, isRunning]) => 
+                      isRunning && (
+                        <Button 
+                          key={jobId}
+                          onClick={() => stopScraper(jobId)} 
+                          variant="destructive"
+                          disabled={stoppingJobs[jobId]} 
+                          className="flex items-center space-x-2"
+                          size="sm"
+                        >
+                          {stoppingJobs[jobId] ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              <span>Stopping {jobId.slice(0, 8)}...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Square className="mr-2 h-4 w-4" />
+                              <span>Stop {jobId.slice(0, 8)}</span>
+                            </>
+                          )}
+                        </Button>
+                      )
+                    )}
+                  </div>
+                  {Object.keys(jobLogs).length > 1 && (
+                    <Select
+                      value={activeJobId || ""}
+                      onValueChange={(value: string) => setActiveJobId(value)}
+                    >
+                      <SelectTrigger className="w-[200px]">
+                        <SelectValue placeholder="Select job" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.keys(jobLogs).map((jobId: string) => (
+                          <SelectItem key={jobId} value={jobId}>
+                            {jobId === "system" ? "System Messages" : `Job: ${jobId.slice(0, 8)}...`}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   )}
                 </div>
-              </ScrollArea>
-              <div className="mt-2 flex justify-between">
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={() => activeJobId && clearLogs(activeJobId)}
-                  disabled={!activeJobId || currentLogs.length === 0}
-                >
-                  Clear Logs
-                </Button>
-                {Object.entries(runningJobs).map(([jobId, isRunning]: [string, boolean]) => 
-                  isRunning && jobId === activeJobId && (
-                    <Button
-                      key={jobId}
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => stopScraper(jobId)}
-                      disabled={stoppingJobs[jobId]}
-                    >
-                      {stoppingJobs[jobId] ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Stopping...
-                        </>
-                      ) : (
-                        <>
-                          <Square className="mr-2 h-4 w-4" /> Stop Scraper
-                        </>
-                      )}
-                    </Button>
-                  )
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+                <CardDescription>
+                  View the execution logs from the scraping process
+                  <span className={`ml-3 inline-flex items-center px-2 py-1 rounded-full ${isConnected ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'} text-sm font-medium`}>
+                    <span className={`mr-1.5 h-2.5 w-2.5 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></span>
+                    {isConnected ? 'Connected' : 'Disconnected'}
+                  </span>
+                  {Object.entries(runningJobs).map(([jobId, isRunning]: [string, boolean]) => 
+                    isRunning && (
+                      <span key={jobId} className="ml-2 text-xs">
+                        {stoppingJobs[jobId] ? `Stopping scraper (Job ID: ${jobId})...` : `Scraper running (Job ID: ${jobId})...`}
+                      </span>
+                    )
+                  )}
+                  {activeJobId === "system" && (
+                    <span className="ml-2 text-xs font-bold">
+                      Viewing system messages
+                    </span>
+                  )}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex justify-end mb-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => clearLogs(activeJobId || "")}
+                  >
+                    Clear Logs
+                  </Button>
+                </div>
 
-      <div className="mt-6 flex justify-between">
-        <div className="flex gap-4">
-          <Button variant="outline" onClick={() => setActiveTab("config")}>
-            Edit Configuration
-          </Button>
-          <Button
-            className="bg-green-600 hover:bg-green-700"
-            onClick={runScraper}
-            disabled={!userId || Object.values(loadingJobs).some(isLoading => isLoading)}
-          >
-            {Object.values(loadingJobs).some(isLoading => isLoading) ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Running...
-              </>
-            ) : (
-              <>
-                <Play className="mr-2 h-4 w-4" /> Run Scraper
-              </>
-            )}
-          </Button>
-        </div>
+                <ScrollArea className="relative h-[500px] rounded-md border p-4">
+                  {activeJobId && jobLogs[activeJobId] ? (
+                    jobLogs[activeJobId].length > 0 ? (
+                      <div className="space-y-1 font-mono text-sm">
+                        {jobLogs[activeJobId].map((entry, index) => (
+                          <div key={`${entry.id}-${index}`} className="whitespace-pre-wrap">{entry.text}</div>
+                        ))}
+                        <div ref={endOfLogsRef} />
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-muted-foreground">
+                        No logs yet.
+                      </div>
+                    )
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <AlertCircle className="mx-auto h-8 w-8 mb-2" />
+                      <p>No logs available. Start the scraper to see logs.</p>
+                    </div>
+                  )}
+                </ScrollArea>
+
+                {!isConnected && (
+                  <Alert className="mt-4 border-red-600 bg-red-50">
+                    <AlertCircle className="h-4 w-4 text-red-600" />
+                    <AlertTitle className="text-red-600">Connection Error</AlertTitle>
+                    <AlertDescription>
+                      Socket.IO connection lost. Please check that the backend server is running.
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+
+        {showDebug && <SocketDebug isConnected={isConnected} userId={userId} socket={socket} />}
       </div>
     </div>
   )
