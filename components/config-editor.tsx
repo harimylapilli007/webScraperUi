@@ -118,7 +118,11 @@ export default function ConfigEditor() {
 
       try {
         console.log('Fetching config for user:', userId);
-        const response = await apiFetch('/get-config');
+        const response = await apiFetch('/get-config', {
+          headers: {
+            'X-User-Id': userId
+          }
+        });
         
         if (!response.ok) {
           throw new Error(`Failed to fetch config: ${response.status}`);
@@ -270,10 +274,15 @@ export default function ConfigEditor() {
     
     const response = await apiFetch('/update-config', {
       method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-User-Id': userId
+      },
       body: configJson,
     });
 
     console.log('Save response status:', response.status);
+    console.log('Save response headers:', Object.fromEntries(response.headers.entries()));
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => null);

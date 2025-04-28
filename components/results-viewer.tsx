@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button"
 import { FileJson, FileSpreadsheet, Loader2 } from "lucide-react"
 import { apiFetch } from "@/utils/api"
+import { getUserId } from "@/utils/api"
 
 // Define a proper type for the scraped data
 interface ScrapedData {
@@ -16,6 +17,8 @@ interface ScrapedData {
 interface ResultsViewerProps {
   jobId: string;
 }
+
+const userId = getUserId();
 
 export default function ResultsViewer({ jobId }: ResultsViewerProps) {
   const [viewMode, setViewMode] = useState("table")
@@ -56,7 +59,11 @@ export default function ResultsViewer({ jobId }: ResultsViewerProps) {
     setIsLoading(true)
     setError(null)
     
-    apiFetch(`/get-scraped-data/${jobId}`)
+    apiFetch(`/get-scraped-data/${jobId}`, {
+      headers: userId ? {
+        'X-User-Id': userId
+      } : undefined
+    })
       .then(response => {
         if (!response.ok) {
           if (response.status === 404) {

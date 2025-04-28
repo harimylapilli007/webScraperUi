@@ -30,7 +30,11 @@ export default function JobsList({ isActive }: JobsListProps) {
     if (!userId) return;
     
     try {
-      const response = await apiFetch('/list-jobs');
+      const response = await apiFetch('/list-jobs', {
+        headers: {
+          'X-User-Id': userId
+        }
+      });
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }

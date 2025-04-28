@@ -16,6 +16,7 @@ import { Manager, Socket } from "socket.io-client"
 import { connect as io } from "socket.io-client"
 
 
+
 interface ExtendedSocket {
   connected: boolean;
   disconnect: () => void;
@@ -597,7 +598,8 @@ export default function WebScraperPage() {
             autoConnect: true,
             forceNew: true,
             query: {
-                userId: effectiveUserId
+                userId: effectiveUserId,
+                timestamp: Date.now()
             },
             auth: {
                 'X-User-Id': effectiveUserId
@@ -912,7 +914,7 @@ export default function WebScraperPage() {
           <TabsContent value="logs">
             <Card>
               <CardHeader>
-                <div className="flex justify-between items-center">
+                <div className="flex justify-between items-center" style={{width: '100%'}}>
                   <div className="flex items-center space-x-4">
                     <CardTitle>Scraping Logs</CardTitle>
                     {Object.entries(runningJobs).map(([jobId, isRunning]) => 
@@ -989,13 +991,21 @@ export default function WebScraperPage() {
                   </Button>
                 </div>
 
-                <ScrollArea className="relative h-[500px] rounded-md border p-4">
+                <ScrollArea className="relative h-[500px]  rounded-md border p-4 bg-black">
                   {activeJobId && jobLogs[activeJobId] ? (
                     jobLogs[activeJobId].length > 0 ? (
-                      <div className="space-y-1 font-mono text-sm">
-                        {jobLogs[activeJobId].map((entry, index) => (
-                          <div key={`${entry.id}-${index}`} className="whitespace-pre-wrap">{entry.text}</div>
-                        ))}
+                      <div className="space-y-1 font-mono text-sm overflow-x-auto">
+                        {jobLogs[activeJobId].map((entry, index) => {
+                          const isError = entry.text.toLowerCase().includes('error');
+                          return (
+                            <div 
+                              key={`${entry.id}-${index}`} 
+                              className={`whitespace-pre-wrap break-all ${isError ? 'text-red-500' : 'text-green-500'}`}
+                            >
+                              {entry.text}
+                            </div>
+                          );
+                        })}
                         <div ref={endOfLogsRef} />
                       </div>
                     ) : (

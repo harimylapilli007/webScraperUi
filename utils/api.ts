@@ -37,56 +37,31 @@ export const getHeaders = (additionalHeaders = {}) => {
 
 // API fetch wrapper that automatically includes user ID
 export const apiFetch = async (endpoint: string, options: RequestInit = {}) => {
-    try {
-        const url = `${API_BASE_URL}${endpoint}`;
-        const method = options.method || 'GET';
-        
-        console.log(`Making ${method} request to: ${url}`);
-        
-        // Ensure proper headers for POST requests with JSON body
-        const headers = getHeaders(options.headers);
-        if (method === 'POST' && options.body && typeof options.body === 'string') {
-            try {
-                // Verify it's valid JSON
-                JSON.parse(options.body);
-            } catch (e) {
-                console.error('Invalid JSON body:', e);
-                throw new Error('Invalid JSON body');
+    const maxRetries = 3;
+    let retryCount = 0;
+    
+    while (retryCount < maxRetries) {
+        try {
+            const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+                ...options,
+                credentials: 'include',
+                headers: {
+                    ...options.headers,
+                    'X-User-Id': getUserId() || '',
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
             }
+            
+            return response;
+        } catch (error) {
+            retryCount++;
+            if (retryCount === maxRetries) {
+                throw error;
+            }
+            await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
         }
-        
-        // Add timeout to the fetch request
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
-
-        const response = await fetch(url, {
-            ...options,
-            headers,
-            credentials: 'include', // This is important for CORS
-            signal: controller.signal
-        });
-        
-        clearTimeout(timeoutId);
-        
-        // Log response details for debugging
-        console.log(`Response status: ${response.status}`);
-        console.log('Response headers:', Object.fromEntries(response.headers.entries()));
-        
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        
-        return response;
-    } catch (error: any) {
-        if (error.name === 'AbortError') {
-            console.error('Request timed out');
-            throw new Error('Request timed out after 30 seconds');
-        }
-        if (error.message === 'Failed to fetch') {
-            console.error('Network error - please check if the backend server is running');
-            throw new Error('Unable to connect to the server. Please ensure the backend is running.');
-        }
-        console.error('API request failed:', error);
-        throw error;
     }
 }; 
