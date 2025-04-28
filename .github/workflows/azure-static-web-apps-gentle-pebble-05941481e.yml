@@ -32,6 +32,13 @@ jobs:
                const coredemo = require('@actions/core')
                return await coredemo.getIDToken()
            result-encoding: string
+      - name: Create .env file
+        run: |
+          cat << EOF > .env
+          NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }}
+          NEXT_PUBLIC_OTHER_VARIABLE=${{ secrets.NEXT_PUBLIC_OTHER_VARIABLE }}
+          # Add more environment variables as needed
+          EOF
       - name: Build And Deploy
         id: builddeploy
         uses: Azure/static-web-apps-deploy@v1
