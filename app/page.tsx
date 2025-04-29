@@ -78,7 +78,7 @@ const SocketDebug = ({ isConnected, userId, socket }: { isConnected: boolean, us
       setLastActivity(`Connected at ${new Date().toLocaleTimeString()}`);
       setConnectionError(null);
     } else {
-      setConnectionError("Disconnected - Check if backend is running on port 5000");
+      setConnectionError("Disconnected - Check if backend is running");
     }
   }, [isConnected]);
   
@@ -558,8 +558,8 @@ export default function WebScraperPage() {
     console.log("🔌 Attempting to connect to Socket.IO...");
     
     try {
-        // Use explicit localhost URL to ensure connection
-        const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:5000';
+        // Use environment variable for socket URL
+        const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || 'https://webscraperbackned-efctg3bmasakduez.centralindia-01.azurewebsites.net';
         
         // Test if server is reachable before connecting
         const isServerAvailable = await pingServer(socketUrl);
@@ -571,7 +571,6 @@ export default function WebScraperPage() {
           setTimeout(() => connectSocketIO(userIdToSend), 5000);
           return;
         }
-            
         console.log("Socket URL:", socketUrl);
         
         // Ensure we always have a user ID
@@ -705,7 +704,7 @@ export default function WebScraperPage() {
     setActiveTab("logs");
     
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL;
       // Use getHeaders to include X-User-Id header
       const headers = getHeaders();
       const response = await axios.post<ScraperResponse>(
@@ -777,7 +776,7 @@ export default function WebScraperPage() {
     setStoppingJobs(prev => ({ ...prev, [jobId]: true }));
     
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL ;
       // Use getHeaders to include X-User-Id header
       const headers = getHeaders();
       const response = await axios.post<ScraperResponse>(
