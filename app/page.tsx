@@ -368,9 +368,12 @@ export default function WebScraperPage() {
                              
         if (isDriverError) {
             console.log(`Driver error detected for job ${useJobId}`);
-            setRunningJobs(prev => ({ ...prev, [useJobId]: false }));
-            setLoadingJobs(prev => ({ ...prev, [useJobId]: false }));
-            setStoppingJobs(prev => ({ ...prev, [useJobId]: false }));
+            // Don't reset button states for ChromeDriver errors
+            if (!messageContent?.toLowerCase().includes("chromedriver")) {
+                setRunningJobs(prev => ({ ...prev, [useJobId]: false }));
+                setLoadingJobs(prev => ({ ...prev, [useJobId]: false }));
+                setStoppingJobs(prev => ({ ...prev, [useJobId]: false }));
+            }
         }
         
         // Process log message as before
@@ -559,7 +562,7 @@ export default function WebScraperPage() {
     
     try {
         // Use environment variable for socket URL
-        const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || 'https://webscraperbackned-efctg3bmasakduez.centralindia-01.azurewebsites.net';
+        const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:5000';
         
         // Test if server is reachable before connecting
         const isServerAvailable = await pingServer(socketUrl);
@@ -592,17 +595,22 @@ export default function WebScraperPage() {
         socket.current = io(socketUrl, {
             transports: ['polling', 'websocket'],  // Start with polling then upgrade to websocket
             reconnection: true,
-            reconnectionAttempts: Infinity,
-            reconnectionDelay: 1000,
+            reconnectionAttempts: 10,  // Increased from Infinity
+            reconnectionDelay: 2000,   // Increased from 1000
+            reconnectionDelayMax: 30000, // Increased from 5000
             autoConnect: true,
             forceNew: true,
+            timeout: 25000,  // Added explicit timeout
             query: {
                 userId: effectiveUserId,
                 timestamp: Date.now()
             },
             auth: {
                 'X-User-Id': effectiveUserId
-            }
+            },
+            upgrade: true,
+            rememberUpgrade: true,
+            path: '/socket.io/'
         }) as unknown as ExtendedSocket;
 
         // Connection event handlers
