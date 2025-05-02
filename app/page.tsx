@@ -519,7 +519,10 @@ export default function WebScraperPage() {
   const pingServer = async (url: string): Promise<boolean> => {
     try {
       // Get the proper headers including X-User-Id
-      const headers = getHeaders({ 'Content-Type': 'application/json' });
+      const headers = getHeaders({ 
+        'Content-Type': 'application/json',
+        'X-User-Id': getUserId() || ''
+      });
       
       // Get the user ID to also append as query parameter
       const userId = getUserId();
@@ -529,6 +532,8 @@ export default function WebScraperPage() {
       const response = await fetch(pingUrl, {
         method: 'GET',
         headers,
+        credentials: 'include', // Add this to include credentials
+        mode: 'cors', // Explicitly set CORS mode
         // Short timeout to avoid long waits
         signal: AbortSignal.timeout(3000)
       });
@@ -562,7 +567,7 @@ export default function WebScraperPage() {
     
     try {
         // Use environment variable for socket URL
-        const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://4.224.100.78:5000';
+        const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://4.186.13.40:5000/';
         
         // Test if server is reachable before connecting
         const isServerAvailable = await pingServer(socketUrl);
