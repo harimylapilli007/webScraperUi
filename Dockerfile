@@ -5,8 +5,8 @@ FROM node:20-alpine
 WORKDIR /app
 
 # Set environment variables
-ENV NEXT_PUBLIC_API_URL=http://4.188.2.29:5000
-ENV NEXT_PUBLIC_SOCKET_URL=http://4.188.2.29:5000
+ENV NEXT_PUBLIC_API_URL=http://4.224.99.31:5000
+ENV NEXT_PUBLIC_SOCKET_URL=http://4.224.99.31:5000
 
 # Copy package.json and package-lock.json
 COPY package*.json ./
