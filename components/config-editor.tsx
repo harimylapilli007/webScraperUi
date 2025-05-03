@@ -10,6 +10,8 @@ import { Switch } from "@/components/ui/switch"
 import { Plus, X, Save, ArrowUp, ArrowDown, Settings2 } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { apiFetch, getUserId } from "@/utils/api"
+import { Info } from "lucide-react"
+import { InfoIcon } from "lucide-react"
 
 interface Field {
   key: string
@@ -55,8 +57,8 @@ const SelectorHelper = () => {
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button variant="outline" size="icon" className="ml-2">
-          <Settings2 className="h-4 w-4" />
+        <Button variant="outline" size="sm" className="ml-2">
+          <InfoIcon className="h-4 w-4" />
         </Button>
       </DialogTrigger>
       <DialogContent>

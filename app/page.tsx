@@ -849,7 +849,7 @@ export default function WebScraperPage() {
   }, [activeJobId, jobLogs, forceRefresh]);
 
   return (
-    <div className="container py-8 mx-auto">
+    <div className="container py-8 px-8 mx-auto">
       <h1 className="text-3xl font-bold mb-6">Web Scraper</h1>
       <div className="grid gap-8">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
