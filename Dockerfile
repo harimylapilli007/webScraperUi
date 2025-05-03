@@ -5,8 +5,8 @@ FROM node:20-alpine
 WORKDIR /app
 
 # Set environment variables
-ENV NEXT_PUBLIC_API_URL=http://localhost:5000
-ENV NEXT_PUBLIC_SOCKET_URL=http://localhost:5000
+ENV NEXT_PUBLIC_API_URL=https://webscraperbackendcontainer-c0edeyemf6eqczd5.canadacentral-01.azurewebsites.net
+ENV NEXT_PUBLIC_SOCKET_URL=https://webscraperbackendcontainer-c0edeyemf6eqczd5.canadacentral-01.azurewebsites.net
 
 # Copy package.json and package-lock.json
 COPY package*.json ./

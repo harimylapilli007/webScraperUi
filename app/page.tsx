@@ -567,7 +567,7 @@ export default function WebScraperPage() {
     
     try {
         // Use environment variable for socket URL
-        const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://4.224.91.146:5000';
+        const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || 'https://webscraperbackendcontainer-c0edeyemf6eqczd5.canadacentral-01.azurewebsites.net';
         
         // Test if server is reachable before connecting
         const isServerAvailable = await pingServer(socketUrl);
