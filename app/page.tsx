@@ -364,14 +364,16 @@ export default function WebScraperPage() {
         // Check for error messages that might indicate driver issues
         const isDriverError = messageContent?.toLowerCase().includes("error") && 
                             (messageContent?.toLowerCase().includes("driver") || 
-                             messageContent?.toLowerCase().includes("chrome"));
+                             messageContent?.toLowerCase().includes("chrome") ||
+                             messageContent?.toLowerCase().includes("selenium") ||
+                             messageContent?.toLowerCase().includes("no such element"));
                              
         if (isDriverError) {
             console.log(`Driver error detected for job ${useJobId}`);
-            // Don't reset button states for ChromeDriver errors
+            // Don't reset button states for ChromeDriver/Selenium errors
             if (!messageContent?.toLowerCase().includes("chromedriver")) {
                 setRunningJobs(prev => ({ ...prev, [useJobId]: false }));
-                setLoadingJobs(prev => ({ ...prev, [useJobId]: false }));
+                // Remove the loading state reset for Selenium errors
                 setStoppingJobs(prev => ({ ...prev, [useJobId]: false }));
             }
         }
@@ -775,7 +777,7 @@ export default function WebScraperPage() {
         };
       });
       
-      setLoadingJobs({});
+      // Only reset running and stopping states, but keep loading state
       setRunningJobs({});
       setStoppingJobs({});
       setActiveJobId(null);

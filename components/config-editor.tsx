@@ -7,11 +7,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
-import { Plus, X, Save, ArrowUp, ArrowDown, Settings2 } from "lucide-react"
+import { Plus, X, Save, ArrowUp, ArrowDown, Settings2, Info } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { apiFetch, getUserId } from "@/utils/api"
-import { Info } from "lucide-react"
-import { InfoIcon } from "lucide-react"
 
 interface Field {
   key: string
@@ -19,12 +17,16 @@ interface Field {
   isAttribute: boolean
   attribute: string
   isLink?: boolean
+  useLabel?: boolean
+  label?: string
 }
 
 interface ConfigField {
   selector?: string
   attribute?: string
   is_link?: boolean
+  use_label?: boolean
+  label?: string
 }
 
 interface Config {
@@ -36,6 +38,7 @@ interface Config {
   paginate: boolean
   start_page: number
   max_pages: number
+  skip_pages: number
   next_page_selector: string
   page_wait: number
   max_scroll_attempts: number
@@ -58,7 +61,7 @@ const SelectorHelper = () => {
     <Dialog>
       <DialogTrigger asChild>
         <Button variant="outline" size="sm" className="ml-2">
-          <InfoIcon className="h-4 w-4" />
+          <Info className="h-4 w-4" />
         </Button>
       </DialogTrigger>
       <DialogContent>
@@ -138,14 +141,16 @@ export default function ConfigEditor() {
         // Initialize fields from the loaded config
         const loadedFields = Object.entries(data.fields).map(([key, value]) => {
           if (typeof value === "string") {
-            return { key, selector: value, isAttribute: false, attribute: "" }
+            return { key, selector: value, isAttribute: false, attribute: "", useLabel: false, label: "" }
           } else {
             return {
               key,
               selector: (value as ConfigField).selector || "",
               isAttribute: true,
               attribute: (value as ConfigField).attribute || "",
-              isLink: (value as ConfigField).is_link || false
+              isLink: (value as ConfigField).is_link || false,
+              useLabel: (value as ConfigField).use_label || false,
+              label: (value as ConfigField).label || ""
             }
           }
         });
@@ -154,13 +159,15 @@ export default function ConfigEditor() {
         // Initialize subpage fields
         const loadedSubpageFields = Object.entries(data.subpage_fields || {}).map(([key, value]) => {
           if (typeof value === "string") {
-            return { key, selector: value, isAttribute: false, attribute: "" }
+            return { key, selector: value, isAttribute: false, attribute: "", useLabel: false, label: "" }
           } else {
             return {
               key,
               selector: (value as ConfigField).selector || "",
               isAttribute: true,
-              attribute: (value as ConfigField).attribute || ""
+              attribute: (value as ConfigField).attribute || "",
+              useLabel: (value as ConfigField).use_label || false,
+              label: (value as ConfigField).label || ""
             }
           }
         });
@@ -185,7 +192,12 @@ export default function ConfigEditor() {
     const updatedSubpageFields: Record<string, string | ConfigField> = {};
 
     fieldsToUpdate.forEach((field) => {
-      if (field.isAttribute) {
+      if (field.useLabel) {
+        updatedFields[field.key] = {
+          use_label: true,
+          label: field.label
+        };
+      } else if (field.isAttribute) {
         updatedFields[field.key] = {
           selector: field.selector,
           attribute: field.attribute,
@@ -197,7 +209,12 @@ export default function ConfigEditor() {
     });
 
     subpageFieldsToUpdate.forEach((field) => {
-      if (field.isAttribute) {
+      if (field.useLabel) {
+        updatedSubpageFields[field.key] = {
+          use_label: true,
+          label: field.label
+        };
+      } else if (field.isAttribute) {
         updatedSubpageFields[field.key] = {
           selector: field.selector,
           attribute: field.attribute
@@ -237,6 +254,12 @@ export default function ConfigEditor() {
   const updateField = (index: number, key: string, value: any) => {
     const newFields = [...fields]
     newFields[index] = { ...newFields[index], [key]: value }
+    
+    // If useLabel is toggled off, clear the label field
+    if (key === 'useLabel' && !value) {
+      newFields[index].label = ''
+    }
+    
     setFields(newFields)
     updateConfig(newFields)
   }
@@ -254,11 +277,17 @@ export default function ConfigEditor() {
   };
 
   const updateSubpageField = (index: number, key: string, value: any) => {
-    const newSubpageFields = [...subpageFields];
-    newSubpageFields[index] = { ...newSubpageFields[index], [key]: value };
-    setSubpageFields(newSubpageFields);
-    updateConfig(undefined, newSubpageFields);
-  };
+    const newSubpageFields = [...subpageFields]
+    newSubpageFields[index] = { ...newSubpageFields[index], [key]: value }
+    
+    // If useLabel is toggled off, clear the label field
+    if (key === 'useLabel' && !value) {
+      newSubpageFields[index].label = ''
+    }
+    
+    setSubpageFields(newSubpageFields)
+    updateConfig(undefined, newSubpageFields)
+  }
 
  const handleSave = async () => {
   try {
@@ -325,13 +354,15 @@ export default function ConfigEditor() {
             // Update fields state based on imported config
             const importedFields = Object.entries(importedConfig.fields).map(([key, value]) => {
               if (typeof value === "string") {
-                return { key, selector: value, isAttribute: false, attribute: "" }
+                return { key, selector: value, isAttribute: false, attribute: "", useLabel: false, label: "" }
               } else {
                 return {
                   key,
                   selector: (value as any).selector,
                   isAttribute: true,
                   attribute: (value as any).attribute,
+                  useLabel: (value as any).use_label || false,
+                  label: (value as any).label || ""
                 }
               }
             })
@@ -543,6 +574,19 @@ export default function ConfigEditor() {
                           step="1"
                         />
                       </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="skip_pages">Skip Pages</Label>
+                        <Input
+                          id="skip_pages"
+                          type="number"
+                          value={config?.skip_pages ?? 0}
+                          onChange={(e) => handleInputChange("skip_pages", Number(e.target.value))}
+                          min="0"
+                          step="1"
+                          placeholder="Number of pages to skip"
+                        />
+                      </div>
                     </div>
                   </div>
                 )}
@@ -586,14 +630,16 @@ export default function ConfigEditor() {
                     // Update fields from the JSON
                     const loadedFields = Object.entries(parsed.fields).map(([key, value]) => {
                       if (typeof value === "string") {
-                        return { key, selector: value, isAttribute: false, attribute: "" }
+                        return { key, selector: value, isAttribute: false, attribute: "", useLabel: false, label: "" }
                       } else {
                         return {
                           key,
                           selector: (value as ConfigField).selector || "",
                           isAttribute: true,
                           attribute: (value as ConfigField).attribute || "",
-                          isLink: (value as ConfigField).is_link || false
+                          isLink: (value as ConfigField).is_link || false,
+                          useLabel: (value as ConfigField).use_label || false,
+                          label: (value as ConfigField).label || ""
                         }
                       }
                     });
@@ -602,13 +648,15 @@ export default function ConfigEditor() {
                     // Update subpage fields from the JSON
                     const loadedSubpageFields = Object.entries(parsed.subpage_fields || {}).map(([key, value]) => {
                       if (typeof value === "string") {
-                        return { key, selector: value, isAttribute: false, attribute: "" }
+                        return { key, selector: value, isAttribute: false, attribute: "", useLabel: false, label: "" }
                       } else {
                         return {
                           key,
                           selector: (value as ConfigField).selector || "",
                           isAttribute: true,
-                          attribute: (value as ConfigField).attribute || ""
+                          attribute: (value as ConfigField).attribute || "",
+                          useLabel: (value as ConfigField).use_label || false,
+                          label: (value as ConfigField).label || ""
                         }
                       }
                     });
@@ -651,16 +699,39 @@ export default function ConfigEditor() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor={`field-selector-${index}`}>CSS Selector</Label>
-                    <div className="flex items-center">
-                      <Input
-                        id={`field-selector-${index}`}
-                        value={field.selector}
-                        onChange={(e) => updateField(index, "selector", e.target.value)}
-                        placeholder=".item-name, .price, etc."
+                    <div className="flex items-center space-x-2 mb-2">
+                      <Switch
+                        id={`field-use-label-${index}`}
+                        checked={field.useLabel ?? false}
+                        onCheckedChange={(checked) => updateField(index, "useLabel", checked)}
                       />
-                      <SelectorHelper />
+                      <Label htmlFor={`field-use-label-${index}`}>Use Label Text</Label>
                     </div>
+
+                    {field.useLabel ? (
+                      <div className="space-y-2">
+                        <Label htmlFor={`field-label-${index}`}>Label Text</Label>
+                        <Input
+                          id={`field-label-${index}`}
+                          value={field.label ?? ''}
+                          onChange={(e) => updateField(index, "label", e.target.value)}
+                          placeholder="Enter the label text to match"
+                        />
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <Label htmlFor={`field-selector-${index}`}>CSS Selector</Label>
+                        <div className="flex items-center">
+                          <Input
+                            id={`field-selector-${index}`}
+                            value={field.selector}
+                            onChange={(e) => updateField(index, "selector", e.target.value)}
+                            placeholder=".item-name, .price, etc."
+                          />
+                          <SelectorHelper />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -736,16 +807,39 @@ export default function ConfigEditor() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor={`subpage-field-selector-${index}`}>CSS Selector</Label>
-                      <div className="flex items-center">
-                        <Input
-                          id={`subpage-field-selector-${index}`}
-                          value={field.selector}
-                          onChange={(e) => updateSubpageField(index, "selector", e.target.value)}
-                          placeholder=".bio-text, .full-title, etc."
+                      <div className="flex items-center space-x-2 mb-2">
+                        <Switch
+                          id={`subpage-field-use-label-${index}`}
+                          checked={field.useLabel ?? false}
+                          onCheckedChange={(checked) => updateSubpageField(index, "useLabel", checked)}
                         />
-                        <SelectorHelper />
+                        <Label htmlFor={`subpage-field-use-label-${index}`}>Use Label Text</Label>
                       </div>
+
+                      {field.useLabel ? (
+                        <div className="space-y-2">
+                          <Label htmlFor={`subpage-field-label-${index}`}>Label Text</Label>
+                          <Input
+                            id={`subpage-field-label-${index}`}
+                            value={field.label ?? ''}
+                            onChange={(e) => updateSubpageField(index, "label", e.target.value)}
+                            placeholder="Enter the label text to match"
+                          />
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <Label htmlFor={`subpage-field-selector-${index}`}>CSS Selector</Label>
+                          <div className="flex items-center">
+                            <Input
+                              id={`subpage-field-selector-${index}`}
+                              value={field.selector}
+                              onChange={(e) => updateSubpageField(index, "selector", e.target.value)}
+                              placeholder=".bio-text, .full-title, etc."
+                            />
+                            <SelectorHelper />
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
 

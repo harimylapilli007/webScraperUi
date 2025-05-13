@@ -144,14 +144,15 @@ export default function JobsList({ isActive }: JobsListProps) {
                 <div className="flex flex-col items-start">
                   <span className="font-medium">Job ID: {job.id}</span>
                   <span className="text-sm text-muted-foreground">
-                    Started: {job.start_time ? new Date(job.start_time).toLocaleString(undefined, {
+                    Started: {job.start_time ? new Date(job.start_time).toLocaleString('en-IN', {
                       year: 'numeric',
                       month: 'numeric',
                       day: 'numeric',
                       hour: '2-digit',
                       minute: '2-digit',
                       second: '2-digit',
-                      hour12: false
+                      hour12: false,
+                      timeZone: 'Asia/Kolkata'
                     }) : 'N/A'}
                   </span>
                 </div>

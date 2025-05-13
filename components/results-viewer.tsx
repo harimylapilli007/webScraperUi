@@ -111,13 +111,18 @@ export default function ResultsViewer({ jobId }: ResultsViewerProps) {
 
   const downloadCsv = () => {
     try {
+      const defaultFilename = `scraped_data_${jobId}.xlsx`;
+      const filename = prompt('Enter filename for Excel download:', defaultFilename);
+      
+      if (!filename) return; // User cancelled the prompt
+      
       apiFetch(`/get-excel-data/${jobId}`)
         .then(response => response.blob())
         .then(blob => {
           const url = window.URL.createObjectURL(blob)
           const a = document.createElement("a")
           a.href = url
-          a.download = `scraped_data_${jobId}.xlsx`
+          a.download = filename.endsWith('.xlsx') ? filename : `${filename}.xlsx`
           a.click()
           window.URL.revokeObjectURL(url)
         })
