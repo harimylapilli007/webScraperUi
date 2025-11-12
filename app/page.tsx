@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { AlertCircle, Play, Loader2, Square } from "lucide-react"
+import { AlertCircle, Play, Loader2, Square, MoonIcon, SunIcon } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import ConfigEditor from "@/components/config-editor"
 import JobsList from "@/components/jobs-list"
@@ -14,6 +14,7 @@ import { getUserId, getHeaders } from "@/utils/api"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Manager, Socket } from "socket.io-client"
 import { connect as io } from "socket.io-client"
+import { useTheme } from "next-themes"
 
 
 
@@ -152,6 +153,7 @@ const SocketDebug = ({ isConnected, userId, socket }: { isConnected: boolean, us
 };
 
 export default function WebScraperPage() {
+  const { theme, setTheme } = useTheme()
   const [activeTab, setActiveTab] = useState<string>("config")
   const [jobLogs, setJobLogs] = useState<JobLogs>({})
   const [logCounter, setLogCounter] = useState<number>(0)
@@ -851,8 +853,17 @@ export default function WebScraperPage() {
   }, [activeJobId, jobLogs, forceRefresh]);
 
   return (
-    <div className="container py-8 px-8 mx-auto">
-      <h1 className="text-3xl font-bold mb-6">Web Scraper</h1>
+    <div className="container mx-auto p-4">
+      <div className="flex justify-between items-center mb-4">
+        <h1 className="text-2xl font-bold">Web Scraper</h1>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+        >
+          {theme === "dark" ? <SunIcon className="h-5 w-5" /> : <MoonIcon className="h-5 w-5" />}
+        </Button>
+      </div>
       <div className="grid gap-8">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList>
